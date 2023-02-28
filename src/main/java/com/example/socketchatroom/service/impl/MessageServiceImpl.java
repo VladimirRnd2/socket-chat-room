@@ -32,6 +32,7 @@ public class MessageServiceImpl implements MessageService {
         return messageRepository.save(message);
     }
 
+
     @Override
     public Message sendMessage(Message message) throws JsonProcessingException {
         if (message.getRecipientNames() == null) {
