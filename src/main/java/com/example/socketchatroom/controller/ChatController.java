@@ -31,7 +31,6 @@ import static com.example.socketchatroom.utils.Constants.*;
 public class ChatController {
 
     private final JwtProvider jwtProvider;
-    private final SimpMessagingTemplate messagingTemplate;
     private final ChatroomService chatroomService;
     private final MessageService messageService;
     private final HashOperations<String, String, String> opsForHash;
@@ -40,7 +39,6 @@ public class ChatController {
     @MessageMapping("message")
     public void sendMessage(@Payload String messageRequest, Principal principal) throws Exception {
         Message message = getMessageFromJson(messageRequest, principal.getName());
-
         Message resultMessage = messageService.sendMessage(message);
         System.out.println("Message : [Id: "
                 + resultMessage.getId()

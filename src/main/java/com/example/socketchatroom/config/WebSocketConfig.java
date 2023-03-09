@@ -1,8 +1,17 @@
 package com.example.socketchatroom.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.SneakyThrows;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -15,6 +24,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.AntPathMatcher;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -26,15 +36,24 @@ import java.util.Objects;
 @Order(Ordered.HIGHEST_PRECEDENCE + 99)
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplateBuilder().build();
+    }
+
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableStompBrokerRelay("/topic", "/queue")
+        registry.enableStompBrokerRelay("/topic", "/queue", "/exchange")
                 .setRelayHost("192.168.2.40")
                 .setRelayPort(61613)
                 .setClientLogin("admin")
                 .setClientPasscode("admin")
                 .setSystemLogin("admin")
-                .setSystemPasscode("admin");
+                .setSystemPasscode("admin")
+                .setUserRegistryBroadcast("/topic/registry.broadcast");
         registry.setApplicationDestinationPrefixes("/app");
         registry.setUserDestinationPrefix("/user");
         registry.setPreservePublishOrder(true);
@@ -50,17 +69,23 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         registration.interceptors(new ChannelInterceptor() {
+            @SneakyThrows
             @Override
             public Message<?> preSend(Message<?> message, MessageChannel channel) {
                 StompHeaderAccessor accessor =
                         MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
                 if (StompCommand.CONNECT.equals(Objects.requireNonNull(accessor).getCommand())) {
-                    UserDetails userDetails = User.builder()
-                            .username(Objects.requireNonNull(accessor.getFirstNativeHeader("user-name")))
-                            .password("")
-                            .roles("USER")
-                            .build();
-                    accessor.setUser(new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities()));
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.set("Authorization", Objects.requireNonNull(accessor.getFirstNativeHeader("Authorization")));
+                    HttpEntity headerRequest = new HttpEntity(headers);
+                    ResponseEntity<String> exchange = restTemplate().exchange("http://localhost:8081/validate", HttpMethod.GET, headerRequest, String.class);
+                    User userDetails = objectMapper.readValue(exchange.getBody(), User.class);
+//                    UserDetails userDetails = User.builder()
+//                            .username(Objects.requireNonNull(accessor.getFirstNativeHeader("user-name")))
+//                            .password("")
+//                            .roles("USER")
+//                            .build();
+                    accessor.setUser(new UsernamePasswordAuthenticationToken(userDetails, null, Objects.requireNonNull(userDetails).getAuthorities()));
                 }
                 return message;
             }
