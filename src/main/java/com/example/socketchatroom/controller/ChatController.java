@@ -38,6 +38,7 @@ public class ChatController {
 
     @MessageMapping("message")
     public void sendMessage(@Payload String messageRequest, Principal principal) throws Exception {
+        System.out.println(principal);
         Message message = getMessageFromJson(messageRequest, principal.getName());
         Message resultMessage = messageService.sendMessage(message);
         System.out.println("Message : [Id: "

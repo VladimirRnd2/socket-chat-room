@@ -1,5 +1,7 @@
 package com.example.socketchatroom.config;
 
+import com.example.socketchatroom.model.Person;
+import com.example.socketchatroom.model.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.SneakyThrows;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +13,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -21,6 +22,8 @@ import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.AntPathMatcher;
@@ -29,7 +32,9 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -78,17 +83,23 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     HttpHeaders headers = new HttpHeaders();
                     headers.set("Authorization", Objects.requireNonNull(accessor.getFirstNativeHeader("Authorization")));
                     HttpEntity headerRequest = new HttpEntity(headers);
-                    ResponseEntity<String> exchange = restTemplate().exchange("http://localhost:8081/validate", HttpMethod.GET, headerRequest, String.class);
-                    User userDetails = objectMapper.readValue(exchange.getBody(), User.class);
-//                    UserDetails userDetails = User.builder()
-//                            .username(Objects.requireNonNull(accessor.getFirstNativeHeader("user-name")))
-//                            .password("")
-//                            .roles("USER")
-//                            .build();
+                    Person person = restTemplate().exchange("http://localhost:8081/validate", HttpMethod.GET, headerRequest, Person.class).getBody();
+                    UserDetails userDetails = User.builder()
+                            .username(Objects.requireNonNull(person).getLogin())
+                            .password(person.getPassword())
+                            .authorities(mapToGrantedAuthorities(person.getRoles()))
+                            .build();
                     accessor.setUser(new UsernamePasswordAuthenticationToken(userDetails, null, Objects.requireNonNull(userDetails).getAuthorities()));
                 }
                 return message;
             }
         });
+    }
+
+    private static List<GrantedAuthority> mapToGrantedAuthorities(List<Role> userRoles) {
+        return userRoles.stream()
+                .map(role ->
+                        new SimpleGrantedAuthority(role.getName())
+                ).collect(Collectors.toList());
     }
 }
